@@ -1,7 +1,8 @@
 """
 Training script for the RandomForestClassifier.
-Loads datasets from the datasets/ folder, engineers features,
-trains the model, and saves it for use by the condition predictor.
+Combines ALL datasets into a unified multi-class model that can detect:
+  Anemia, Diabetes, Hypertension, High Cholesterol, Cardiovascular Disease,
+  Heart Disease, Chronic Kidney Disease (CKD), and Fit/Healthy.
 
 Run: python -m app.ml.train_model
 """
@@ -23,159 +24,295 @@ MODEL_PATH = os.path.join(MODEL_DIR, "classifier_model.joblib")
 FEATURE_NAMES_PATH = os.path.join(MODEL_DIR, "feature_names.joblib")
 LABEL_ENCODER_PATH = os.path.join(MODEL_DIR, "label_encoder.joblib")
 
+# ---------------------------------------------------------------
+# DATASET CONFIGS: maps each CSV to how we extract a label from it
+# ---------------------------------------------------------------
+DATASET_CONFIGS = {
+    "health_markers_dataset": {
+        "target": "condition",
+        "label_map": {
+            "Fit": "Fit",
+            "Anemia": "Anemia",
+            "Diabetes": "Diabetes",
+            "Hypertension": "Hypertension",
+            "High_Cholesterol": "High Cholesterol",
+        },
+    },
+    "cardio_train": {
+        "target": "cardio",
+        "sep": ";",
+        "label_map": {
+            "1": "Cardiovascular Disease",
+            1: "Cardiovascular Disease",
+            "0": "Fit",
+            0: "Fit",
+        },
+    },
+    "heart": {
+        "target": "target",
+        "label_map": {
+            1: "Heart Disease",
+            "1": "Heart Disease",
+            0: "Fit",
+            "0": "Fit",
+        },
+    },
+    "kidney_disease": {
+        "target": "classification",
+        "label_map": {
+            "ckd": "Chronic Kidney Disease",
+            "ckd\t": "Chronic Kidney Disease",
+            "notckd": "Fit",
+        },
+    },
+    "diabetes": {
+        "target": "outcome",
+        "label_map": {
+            1: "Diabetes",
+            "1": "Diabetes",
+            0: "Fit",
+            "0": "Fit",
+        },
+    },
+    "diabetes_prediction_dataset": {
+        "target": "diabetes",
+        "label_map": {
+            1: "Diabetes",
+            "1": "Diabetes",
+            0: "Fit",
+            "0": "Fit",
+        },
+    },
+    "blood_count_dataset": {
+        "target": None,  # No label — skip for training
+    },
+}
 
-def load_and_prepare_datasets() -> pd.DataFrame:
+# Unified feature name mapping (standardize across datasets)
+FEATURE_ALIASES = {
+    "haemoglobin": "hemoglobin",
+    "hb": "hemoglobin",
+    "hgb": "hemoglobin",
+    "hemoglobin": "hemoglobin",
+    "glucose": "glucose",
+    "blood_glucose": "glucose",
+    "blood_glucose_level": "glucose",
+    "plasma_glucose": "glucose",
+    "hba1c": "hba1c",
+    "hba1c_level": "hba1c",
+    "systolic_bp": "systolic_bp",
+    "ap_hi": "systolic_bp",
+    "trestbps": "systolic_bp",
+    "diastolic_bp": "diastolic_bp",
+    "ap_lo": "diastolic_bp",
+    "ldl": "ldl",
+    "hdl": "hdl",
+    "triglycerides": "triglycerides",
+    "tg": "triglycerides",
+    "chol": "total_cholesterol",
+    "cholesterol": "total_cholesterol",
+    "total_cholesterol": "total_cholesterol",
+    "mcv": "mcv",
+    "mch": "mch",
+    "mchc": "mchc",
+    "platelet_count": "platelets",
+    "plt": "platelets",
+    "pc": "platelets",
+    "white_blood_cells": "wbc",
+    "wc": "wbc",
+    "wbcc": "wbc",
+    "red_blood_cells": "rbc",
+    "rc": "rbc",
+    "rbcc": "rbc",
+    "age": "age",
+    "bmi": "bmi",
+    "weight": "weight",
+    "height": "height",
+    "bp": "systolic_bp",
+    "sg": "specific_gravity",
+    "al": "albumin_urine",
+    "su": "sugar_urine",
+    "bgr": "glucose",
+    "bu": "bun",
+    "sc": "creatinine",
+    "sod": "sodium",
+    "pot": "potassium",
+    "hemo": "hemoglobin",
+    "pcv": "hematocrit",
+    "rbc": "rbc",
+    "wbc": "wbc",
+    "oldpeak": "oldpeak",
+    "thalach": "max_heart_rate",
+    "ca": "calcium",
+    "insulin": "insulin",
+    "skin_thickness": "skin_thickness",
+    "skinthickness": "skin_thickness",
+    "bloodpressure": "systolic_bp",
+    "diabetespedigreefunction": "diabetes_pedigree",
+    "pregnancies": "pregnancies",
+    "fbs": "fasting_blood_sugar",
+    "restecg": "rest_ecg",
+    "exang": "exercise_angina",
+    "slope": "slope",
+    "thal": "thal",
+    "cp": "chest_pain_type",
+    "sex": "gender",
+    "gender": "gender",
+    "smoke": "smoking",
+    "smoking_history": "smoking",
+    "alco": "alcohol",
+    "active": "active",
+    "hypertension": "has_hypertension",
+    "heart_disease": "has_heart_disease",
+    "htn": "has_hypertension",
+}
+
+
+def load_and_combine_all() -> tuple[pd.DataFrame, pd.Series]:
     """
-    Load all CSV datasets and prepare a unified training dataset.
-    Each dataset is loaded, its target column identified, and features normalized.
-    The best dataset (most features + a clear condition label) is selected.
+    Load ALL datasets, map labels to a unified set, normalize feature names,
+    and combine into a single training DataFrame.
     """
     datasets_path = os.path.abspath(DATASETS_DIR)
-    print(f"Looking for datasets in: {datasets_path}")
-
-    if not os.path.exists(datasets_path):
-        print(f"ERROR: Datasets directory not found: {datasets_path}")
-        sys.exit(1)
+    print(f"Looking for datasets in: {datasets_path}\n")
 
     csv_files = [f for f in os.listdir(datasets_path) if f.endswith(".csv")]
     if not csv_files:
-        print("ERROR: No CSV files found in datasets/. See datasets/README.md for download links.")
+        print("ERROR: No CSV files found in datasets/.")
         sys.exit(1)
 
-    print(f"Found {len(csv_files)} CSV file(s)")
-
-    candidates = []
+    all_frames = []
 
     for csv_file in csv_files:
-        filepath = os.path.join(datasets_path, csv_file)
-        try:
-            # Try different separators
-            df = pd.read_csv(filepath)
-            if df.shape[1] == 1:
-                df = pd.read_csv(filepath, sep=";")
-        except Exception as e:
-            print(f"  WARNING: Could not load {csv_file}: {e}")
+        # Skip duplicates
+        if " copy" in csv_file.lower():
             continue
 
-        # Skip duplicate files
-        if " copy" in csv_file.lower():
-            print(f"  Skipping duplicate: {csv_file}")
+        filepath = os.path.join(datasets_path, csv_file)
+        base_name = os.path.splitext(csv_file)[0].lower()
+
+        # Find matching config
+        config = None
+        for key, cfg in DATASET_CONFIGS.items():
+            if key in base_name:
+                config = cfg
+                break
+
+        if config is None:
+            print(f"  ⚠ {csv_file}: No config found, skipping.")
+            continue
+
+        if config.get("target") is None:
+            print(f"  ⊘ {csv_file}: No target column, skipping.")
+            continue
+
+        # Load CSV
+        sep = config.get("sep", ",")
+        try:
+            df = pd.read_csv(filepath, sep=sep)
+        except Exception as e:
+            print(f"  ✗ {csv_file}: Failed to load — {e}")
             continue
 
         # Normalize column names
-        df.columns = [col.strip().lower().replace(" ", "_") for col in df.columns]
-
-        print(f"\n  {csv_file}: {df.shape[0]} rows × {df.shape[1]} cols")
+        df.columns = [c.strip().lower().replace(" ", "_") for c in df.columns]
 
         # Find the target column
-        target_col = _find_target(df)
-        if target_col is None:
-            print(f"    No suitable target column found, skipping.")
-            continue
+        target_col = config["target"]
+        if target_col not in df.columns:
+            # Try fuzzy match
+            matches = [c for c in df.columns if target_col in c]
+            if matches:
+                target_col = matches[0]
+            else:
+                print(f"  ✗ {csv_file}: Target '{config['target']}' not found. Cols: {list(df.columns)}")
+                continue
 
-        # Find numeric feature columns
-        feature_cols = [
-            col for col in df.columns
-            if col != target_col
-            and df[col].dtype in ["float64", "int64", "float32", "int32"]
-        ]
+        # Map labels
+        label_map = config["label_map"]
+        y = df[target_col].copy()
 
-        if len(feature_cols) < 2:
-            print(f"    Not enough numeric features ({len(feature_cols)}), skipping.")
-            continue
+        # Clean string labels
+        if y.dtype == "object":
+            y = y.str.strip()
 
-        # Clean target labels
-        if df[target_col].dtype == "object":
-            df[target_col] = df[target_col].str.strip()
+        y = y.map(label_map)
+        valid_mask = y.notna()
+        df = df[valid_mask].copy()
+        y = y[valid_mask].copy()
 
-        n_classes = df[target_col].nunique()
-        print(f"    Target: '{target_col}' ({n_classes} classes: {list(df[target_col].unique()[:8])})")
-        print(f"    Features: {len(feature_cols)} → {feature_cols[:8]}{'...' if len(feature_cols) > 8 else ''}")
+        # Drop the target column from features
+        feature_df = df.drop(columns=[target_col], errors="ignore")
 
-        candidates.append({
-            "file": csv_file,
-            "df": df,
-            "target": target_col,
-            "features": feature_cols,
-            "n_classes": n_classes,
-            "score": len(feature_cols) * n_classes  # Prefer more features AND more classes
-        })
+        # Normalize feature column names using aliases
+        new_cols = {}
+        for col in feature_df.columns:
+            col_lower = col.lower().strip()
+            if col_lower in FEATURE_ALIASES:
+                new_cols[col] = FEATURE_ALIASES[col_lower]
+            else:
+                new_cols[col] = col_lower
+        feature_df = feature_df.rename(columns=new_cols)
 
-    if not candidates:
-        print("\nERROR: No suitable datasets found for training.")
+        # Keep only numeric columns
+        numeric_cols = feature_df.select_dtypes(include=[np.number]).columns.tolist()
+        feature_df = feature_df[numeric_cols]
+
+        # Attach the label
+        feature_df = feature_df.copy()
+        feature_df["__label__"] = y.values
+
+        class_counts = y.value_counts()
+        print(f"  ✓ {csv_file}: {len(feature_df)} rows, {len(numeric_cols)} features, "
+              f"classes: {dict(class_counts)}")
+
+        all_frames.append(feature_df)
+
+    if not all_frames:
+        print("\nERROR: No valid datasets could be processed.")
         sys.exit(1)
 
-    # Pick the dataset with the best score (most features × most classes)
-    best = max(candidates, key=lambda c: c["score"])
-    print(f"\n  ★ Selected: {best['file']} (score={best['score']}, "
-          f"{len(best['features'])} features, {best['n_classes']} classes)")
+    # Combine all datasets — missing features become NaN
+    print(f"\nCombining {len(all_frames)} datasets...")
+    combined = pd.concat(all_frames, ignore_index=True, sort=False)
 
-    return best["df"], best["target"], best["features"]
+    # Separate labels
+    y_combined = combined["__label__"]
+    X_combined = combined.drop(columns=["__label__"])
 
+    # Fill NaN with 0 (feature not present in that dataset)
+    X_combined = X_combined.fillna(0)
 
-def _find_target(df: pd.DataFrame) -> str:
-    """Find the target/label column in a dataset."""
-    target_names = [
-        "condition", "diagnosis", "classification", "target", "label",
-        "class", "outcome", "cardio", "diabetes", "disease", "result",
-        "status", "category", "health_condition",
-    ]
+    # Drop any columns that are all zeros (no information)
+    nonzero_cols = X_combined.columns[(X_combined != 0).any()]
+    X_combined = X_combined[nonzero_cols]
 
-    for candidate in target_names:
-        for col in df.columns:
-            if candidate in col.lower():
-                unique = df[col].nunique()
-                if 2 <= unique <= 20:
-                    return col
+    print(f"Combined dataset: {len(X_combined)} rows × {len(X_combined.columns)} features")
+    print(f"\nClass distribution:")
+    for cls, count in y_combined.value_counts().sort_index().items():
+        print(f"  {cls:30s} {count:>6d} samples")
 
-    # Fallback: look for categorical columns with few unique values
-    for col in df.columns:
-        if df[col].dtype == "object":
-            if 2 <= df[col].nunique() <= 10:
-                return col
-
-    return None
+    return X_combined, y_combined
 
 
 def train_model():
     """Main training pipeline."""
     print("=" * 60)
-    print("Lab Report Classifier — Training Pipeline")
+    print("Lab Report Classifier — Unified Training Pipeline")
     print("=" * 60)
 
-    # Step 1: Load and prepare data
-    print("\n[Step 1] Loading datasets...")
-    df, target_col, feature_cols = load_and_prepare_datasets()
+    # Step 1: Load and combine all datasets
+    print("\n[Step 1] Loading and combining ALL datasets...\n")
+    X, y = load_and_combine_all()
 
-    # Step 2: Prepare features and labels
-    print(f"\n[Step 2] Preparing data...")
-    X = df[feature_cols].copy()
-    y = df[target_col].copy()
-
-    # Fill numeric NaN with median
-    for col in feature_cols:
-        X[col] = pd.to_numeric(X[col], errors="coerce")
-        median_val = X[col].median()
-        X[col] = X[col].fillna(median_val if not pd.isna(median_val) else 0)
-
-    # Drop rows where target is NaN
-    mask = y.notna()
-    X = X[mask].reset_index(drop=True)
-    y = y[mask].reset_index(drop=True)
-
-    # Encode labels
+    # Step 2: Encode labels
+    print(f"\n[Step 2] Encoding labels...")
     le = LabelEncoder()
     y_encoded = le.fit_transform(y.astype(str))
-
-    print(f"  Samples: {len(X)}")
-    print(f"  Features: {len(feature_cols)}")
     print(f"  Classes: {list(le.classes_)}")
-    class_counts = pd.Series(y_encoded).value_counts()
-    for cls_idx, count in class_counts.items():
-        print(f"    {le.classes_[cls_idx]}: {count} samples")
 
     # Step 3: Train/test split
-    print(f"\n[Step 3] Splitting data (80% train / 20% test)...")
+    print(f"\n[Step 3] Splitting data (80/20 stratified)...")
     X_train, X_test, y_train, y_test = train_test_split(
         X, y_encoded, test_size=0.2, random_state=42, stratify=y_encoded
     )
@@ -183,32 +320,34 @@ def train_model():
     print(f"  Testing:  {len(X_test)} samples")
 
     # Step 4: Train
-    print(f"\n[Step 4] Training RandomForestClassifier (100 trees)...")
+    print(f"\n[Step 4] Training RandomForestClassifier (200 trees)...")
     model = RandomForestClassifier(
-        n_estimators=100,
-        max_depth=10,
+        n_estimators=200,
+        max_depth=15,
         min_samples_split=5,
         min_samples_leaf=2,
         random_state=42,
         n_jobs=-1,
+        class_weight="balanced",  # Handle class imbalance
     )
     model.fit(X_train, y_train)
     print("  Done!")
 
     # Step 5: Evaluate
     print(f"\n[Step 5] Evaluation Results")
-    print("-" * 40)
+    print("-" * 50)
     y_pred = model.predict(X_test)
     accuracy = accuracy_score(y_test, y_pred)
-    print(f"  Accuracy: {accuracy:.4f} ({accuracy * 100:.1f}%)\n")
+    print(f"  Overall Accuracy: {accuracy:.4f} ({accuracy * 100:.1f}%)\n")
 
     target_names = [str(c) for c in le.classes_]
     print(classification_report(y_test, y_pred, target_names=target_names))
 
-    # Feature importance
-    print("  Feature Importance:")
+    # Top 15 feature importances
+    print("  Top 15 Feature Importances:")
     importances = model.feature_importances_
-    for name, imp in sorted(zip(feature_cols, importances), key=lambda x: x[1], reverse=True):
+    feature_imp = sorted(zip(X.columns, importances), key=lambda x: x[1], reverse=True)
+    for name, imp in feature_imp[:15]:
         bar = "█" * int(imp * 50)
         print(f"    {name:30s} {imp:.4f} {bar}")
 
@@ -218,12 +357,13 @@ def train_model():
     joblib.dump(model, MODEL_PATH)
     joblib.dump(list(X.columns), FEATURE_NAMES_PATH)
     joblib.dump(le, LABEL_ENCODER_PATH)
-    print(f"  ✓ Model:          {MODEL_PATH}")
-    print(f"  ✓ Feature names:  {FEATURE_NAMES_PATH}")
-    print(f"  ✓ Label encoder:  {LABEL_ENCODER_PATH}")
+    print(f"  ✓ Model saved:         {MODEL_PATH}")
+    print(f"  ✓ Feature names saved: {FEATURE_NAMES_PATH}")
+    print(f"  ✓ Label encoder saved: {LABEL_ENCODER_PATH}")
 
     print("\n" + "=" * 60)
-    print(f"Training complete! Model can detect: {list(le.classes_)}")
+    print("Training complete!")
+    print(f"Model can detect: {list(le.classes_)}")
     print("=" * 60)
 
 
