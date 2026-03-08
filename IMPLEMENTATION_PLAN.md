@@ -19,7 +19,7 @@ This is a master's-level demonstration project. The design prioritizes clarity, 
 | HTTP Client | `dio` | Interceptors, cleaner error handling than `http` |
 | Local Storage | `shared_preferences` | Store auth token and user session |
 | Charts | `fl_chart` | Lightweight, good trend visualization |
-| File Picker | `file_picker` | PDF/image upload from browser |
+| File Picker | `file_picker` | PDF/image upload from device |
 
 ---
 
@@ -290,7 +290,7 @@ Scope is a master's demo — apply reasonable, not exhaustive, security.
 | Password storage | `bcrypt` hashing via `passlib` |
 | Input validation | Pydantic schemas on all endpoints |
 | File upload safety | Validate MIME type and file size limit (≤10MB) |
-| CORS | Restrict to Flutter web origin in production config |
+| CORS | Restrict to Flutter mobile app origin in production config |
 | SQL injection | Prevented by SQLAlchemy ORM (no raw queries) |
 | Rate limiting | `slowapi` middleware (basic, per-IP) |
 
@@ -298,23 +298,17 @@ No HTTPS configuration needed for local demo; add if deploying to a public URL.
 
 ---
 
-### 2.8 Deployment (Web Demo + Mobile Access)
+### 2.8 Deployment (Mobile App)
 
-Flutter compiles to both a web build and native mobile builds from the same codebase. This project supports two access modes simultaneously:
+The Flutter mobile application is built and deployed as a native Android APK (iOS requires macOS + Xcode, so Android is the primary target for demonstration).
 
-#### Mode 1 — Browser (Desktop/Laptop Demo)
-- Run `flutter build web` to produce a static web bundle
-- Serve via Nginx or `python -m http.server` on a local or hosted machine
-- Accessible from any browser at the served URL
-- Ideal for live demonstration and evaluation
+#### Build & Deploy
+- Run `flutter build apk --release` to produce an Android APK
+- Install the APK directly on an Android device via USB, file transfer, or `flutter install`
+- No Play Store or app store submission required for demo purposes
+- The app connects to the FastAPI backend via IP/URL configured in the app
 
-#### Mode 2 — Mobile Phone (Android/iOS)
-- Run `flutter build apk` (Android) or `flutter build ios` (iOS, requires macOS + Xcode)
-- Install the APK directly on an Android device via USB or file transfer — no Play Store required
-- iOS requires either a developer certificate sideload or TestFlight — for demo purposes, Android APK is the simpler path
-- The mobile app connects to the same FastAPI backend via its IP/URL; no backend changes needed
-
-#### Backend (Shared by Both)
+#### Backend
 | Component | Tool |
 |---|---|
 | FastAPI backend | `uvicorn app.main:app --host 0.0.0.0 --port 8000` |
@@ -322,7 +316,7 @@ Flutter compiles to both a web build and native mobile builds from the same code
 | ML models | Loaded at startup, cached in memory |
 | Environment | `.env` file via `pydantic-settings` |
 
-The backend is access-mode agnostic — both the browser app and the mobile app communicate with it over HTTP. If deployed to a public URL (e.g., a VPS or ngrok tunnel), both modes work without any reconfiguration beyond updating the base API URL in the Flutter config.
+If deploying to a public URL (e.g., a VPS or ngrok tunnel), update the base API URL in the Flutter config (`lib/config/api_config.dart`).
 
 ---
 
