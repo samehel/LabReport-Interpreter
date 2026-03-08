@@ -1,0 +1,38 @@
+# Web Framework
+fastapi
+uvicorn[standard]
+python-multipart
+
+# Database
+sqlalchemy[asyncio]
+aiosqlite
+
+# Configuration
+pydantic-settings
+
+# Authentication
+python-jose[cryptography]
+passlib[bcrypt]
+bcrypt==4.0.1
+
+# File Processing
+pdfplumber
+pdf2image
+pytesseract
+Pillow
+
+# ML & NLP
+scikit-learn
+scipy
+joblib
+numpy
+pandas
+
+# PDF Generation
+reportlab
+
+# Rate Limiting
+slowapi
+
+# Email validation
+email-validator
