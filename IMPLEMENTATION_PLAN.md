@@ -2,7 +2,7 @@
 
 ## Overview
 
-A web-deployed Flutter application that allows users to upload or manually enter medical lab test results, receive plain-language summaries, track trends across visits, and get flagged alerts for abnormal values. The backend is a Python REST API with an ML pipeline for OCR extraction and NLP-based interpretation.
+A Flutter mobile application that allows users to upload or manually enter medical lab test results, receive plain-language summaries, track trends across visits, and get flagged alerts for abnormal values. The backend is a Python REST API with an ML pipeline for OCR extraction and NLP-based interpretation.
 
 This is a master's-level demonstration project. The design prioritizes clarity, reasonable scope, and demonstrable ML features over production-grade scalability.
 
@@ -14,7 +14,7 @@ This is a master's-level demonstration project. The design prioritizes clarity, 
 
 | Decision | Choice | Reason |
 |---|---|---|
-| Framework | Flutter (Web target) | Single codebase, renders in browser for demo |
+| Framework | Flutter | Single codebase |
 | State Management | Provider or Riverpod | Simple, well-documented, appropriate scope |
 | HTTP Client | `dio` | Interceptors, cleaner error handling than `http` |
 | Local Storage | `shared_preferences` | Store auth token and user session |
@@ -79,7 +79,7 @@ Typography: Use `Poppins` (headers) and `Inter` (body) via Google Fonts package.
 #### Page 4 — Upload Report Screen
 - Two tabs:
   - **Upload File** — drag-and-drop / file picker for PDF or image
-  - **Manual Entry** — dynamic form to add test name, value, and unit row by row
+  - **Manual Entry / Scan to Input** — dynamic form to add test name, value, and unit row by row
 - Report date picker
 - Optional notes field
 - **Analyze** button → calls backend OCR + ML pipeline
@@ -137,14 +137,6 @@ Modal/Push Routes:
   ├── Upload Report (FAB → full screen)
   └── Report Detail (push from Dashboard or History)
 ```
-
----
-
-### 1.5 Responsive Considerations (Web Demo)
-
-- Minimum supported width: 360px (mobile-like in browser)
-- Max content width container: 700px centered for desktop browser view
-- No tablet-specific breakpoints needed for demo scope
 
 ---
 
@@ -229,7 +221,7 @@ Tables:
 
 #### Step 3 — Abnormality Classification (`ml/classifier.py`)
 - Rule-based: compare extracted value against reference range → Normal / Low / High / Critical
-- ML enhancement: train a small sklearn `RandomForestClassifier` or `LogisticRegression` on a sample dataset of lab result patterns to classify contextual risk (e.g., combination of low hemoglobin + low MCV = likely iron deficiency)
+- ML enhancement: train a small sklearn `RandomForestClassifier` on a sample dataset of lab result patterns to classify contextual risk (e.g., combination of low hemoglobin + low MCV = likely iron deficiency)
 - Dataset: use publicly available MIMIC-III derived or synthetic lab result datasets
 
 #### Step 4 — Plain-Language Summary (`ml/summarizer.py`)
