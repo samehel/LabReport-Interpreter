@@ -31,6 +31,24 @@ class UserLogin(BaseModel):
     password: str
 
 
+class OTPVerify(BaseModel):
+    """Schema for OTP verification after registration."""
+    email: EmailStr
+    otp_code: str
+
+    @field_validator("otp_code")
+    @classmethod
+    def otp_format(cls, v: str) -> str:
+        if not v.strip().isdigit() or len(v.strip()) != 6:
+            raise ValueError("OTP must be a 6-digit code")
+        return v.strip()
+
+
+class OTPResend(BaseModel):
+    """Schema for requesting a new OTP code."""
+    email: EmailStr
+
+
 class Token(BaseModel):
     """Schema for JWT token response."""
     access_token: str
@@ -43,6 +61,7 @@ class UserResponse(BaseModel):
     name: str
     email: str
     date_of_birth: Optional[date] = None
+    is_verified: bool = False
     created_at: datetime
 
     class Config:

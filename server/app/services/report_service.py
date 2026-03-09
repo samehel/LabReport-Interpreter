@@ -19,6 +19,8 @@ from app.models.user import User
 from app.schemas.report import ReportCreate, LabValueCreate
 from app.services.ml_service import process_lab_values, process_raw_text
 from app.ml.ocr import extract_text
+from app.utils.email_service import send_email_background
+from app.utils.email_templates import report_ready_email, critical_values_alert_email
 
 
 async def create_report_from_upload(
@@ -109,6 +111,9 @@ async def create_report_from_upload(
     await db.flush()
     await db.refresh(report)
 
+    # Send report-ready email
+    _send_report_emails(user, report, ml_results["lab_values"])
+
     return report
 
 
@@ -164,6 +169,9 @@ async def create_report_from_manual(
 
     await db.flush()
     await db.refresh(report)
+
+    # Send report-ready email
+    _send_report_emails(user, report, ml_results["lab_values"])
 
     return report
 
@@ -317,3 +325,40 @@ async def get_dashboard_stats(user: User, db: AsyncSession) -> dict:
         "flagged_values": flagged_values,
         "last_upload_date": last_upload_date,
     }
+
+
+def _send_report_emails(user: User, report: Report, lab_values: list[dict]):
+    """
+    Send report-ready email and critical-value alert if applicable.
+    All emails are fire-and-forget (non-blocking).
+    """
+    # Count flagged values
+    flagged = sum(
+        1 for lv in lab_values
+        if lv.get("status") in ("low", "high", "critical_low", "critical_high")
+    )
+
+    # Send report-ready email
+    subject, html_body = report_ready_email(
+        name=user.name,
+        report_date=str(report.report_date),
+        total_tests=len(lab_values),
+        flagged_count=flagged,
+        report_id=report.id,
+    )
+    send_email_background(user.email, subject, html_body)
+
+    # If any critical values, send a separate urgent alert
+    critical_values = [
+        lv for lv in lab_values
+        if lv.get("status") in ("critical_low", "critical_high")
+    ]
+
+    if critical_values:
+        alert_subject, alert_html = critical_values_alert_email(
+            name=user.name,
+            critical_values=critical_values,
+            report_date=str(report.report_date),
+        )
+        send_email_background(user.email, alert_subject, alert_html)
+

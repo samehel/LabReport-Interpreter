@@ -36,3 +36,6 @@ slowapi
 
 # Email validation
 email-validator
+
+# Async Email
+aiosmtplib

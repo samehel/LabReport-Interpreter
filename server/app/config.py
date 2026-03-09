@@ -13,6 +13,19 @@ class Settings(BaseSettings):
     MAX_FILE_SIZE_MB: int = 10
     CORS_ORIGINS: str = "*"
 
+    # Email / SMTP settings
+    SMTP_ENABLED: bool = False  # Set to True once SMTP is configured
+    SMTP_HOST: str = "smtp.gmail.com"
+    SMTP_PORT: int = 587
+    SMTP_USERNAME: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_USE_TLS: bool = False
+    SMTP_START_TLS: bool = True
+    EMAIL_FROM_ADDRESS: str = "noreply@labreport.app"
+    EMAIL_FROM_NAME: str = "LabReport Interpreter"
+    OTP_EXPIRE_MINUTES: int = 10
+    BASE_URL: str = "http://localhost:8000"
+
     @property
     def cors_origins_list(self) -> list[str]:
         """Parse CORS origins from comma-separated string."""

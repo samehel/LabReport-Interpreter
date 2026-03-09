@@ -69,25 +69,3 @@ app.include_router(auth.router)
 app.include_router(reports.router)
 app.include_router(metrics.router)
 app.include_router(summary.router)
-
-
-@app.get("/", tags=["Health"])
-async def root():
-    """Health check endpoint."""
-    return {
-        "status": "healthy",
-        "service": "LabReport Interpreter API",
-        "version": "1.0.0",
-    }
-
-
-@app.get("/health", tags=["Health"])
-async def health_check():
-    """Detailed health check."""
-    from app.ml.condition_predictor import is_model_available
-
-    return {
-        "status": "healthy",
-        "database": "connected",
-        "ml_model_loaded": is_model_available(),
-    }
